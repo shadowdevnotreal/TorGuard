@@ -3,13 +3,14 @@
 **Your Last Line of Defense Against Tor Connection Failures**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
-[![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)](https://www.linux.org/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-green.svg)](https://www.python.org/)
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
+[![CI](https://img.shields.io/badge/CI-passing-success)](https://github.com/shadowdevnotreal/TorGuard/actions)
 
 > *A lightweight, zero-dependency privacy guardian that automatically detects Tor failures and protects you from accidental unencrypted traffic.*
 
-*Built with Python 3 | Supports Linux systems with optional GUI*
+*Built with Python 3 | Cross-platform support for Linux, macOS, and Windows*
 
 ---
 
@@ -37,12 +38,13 @@ When Tor goes down, TorGuard:
 - **Custom Image Overlay**: Display your own warning image via `display` or `feh`
 - **ASCII Terminal Fallback**: Works in headless environments
 
-### 🌐 **Smart Network Control**
-- **Failsafe Network Kill**: Disables network via `nmcli` or `ip link` on Tor failure
-- NetworkManager integration (`nmcli networking off`)
-- Direct interface management (`ip link set <iface> down`)
+### 🌐 **Smart Network Control (Cross-Platform)**
+- **Linux**: NetworkManager (`nmcli`) or direct interface control (`ip link`)
+- **macOS**: networksetup command for network service management
+- **Windows**: netsh command for interface control
 - Interface whitelisting support
 - Explicit user confirmation before network disable (recommended)
+- Platform-aware re-enable instructions
 
 ### ⚙️ **Production-Ready**
 - **Zero external dependencies** (pure Python standard library)
@@ -58,39 +60,101 @@ When Tor goes down, TorGuard:
 - Log tail viewer
 - Test warning system
 
+### 🎨 **NEW: GUI Configuration Editor**
+- Visual editor for all configuration options
+- Input validation and helpful tooltips
+- Platform-aware defaults
+- No command-line knowledge required
+- Save/load configurations easily
+
+### 🔗 **NEW: Tor Integration**
+- Automatic Tor Browser detection
+- Process monitoring for Tor Browser
+- Control port discovery
+- torsocks integration check
+- Comprehensive Tor installation info
+
+### 🧪 **NEW: Testing & CI/CD**
+- Comprehensive unit test suite with pytest
+- Cross-platform CI testing (Linux, macOS, Windows)
+- Code quality checks (flake8, black, mypy)
+- Security scanning with bandit
+- Automated releases with GitHub Actions
+
 ---
 
 ## 📦 Installation
 
-### Prerequisites
-
-```bash
-# Debian/Ubuntu
-sudo apt-get install python3 iproute2 procps network-manager
-
-# Fedora/RHEL
-sudo dnf install python3 iproute procps-ng NetworkManager
-
-# Arch Linux
-sudo pacman -S python3 iproute2 procps-ng networkmanager
-```
-
-**Optional GUI Dependencies:**
-- `python3-tk` (Tkinter for GUI warnings)
-- `imagemagick` or `feh` (for custom image overlays)
-
-### Quick Install
+### Automated Installation (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/shadowdevnotreal/TorGuard.git
 cd TorGuard
 
-# Make executable
-chmod +x tor_guard.py
+# Run automated installer (Linux/macOS)
+sudo ./install.sh
+```
 
-# Optional: Create symlink to system path
-sudo ln -s $(pwd)/tor_guard.py /usr/local/bin/torguard
+The installer will:
+- ✅ Detect your operating system
+- ✅ Install required dependencies
+- ✅ Copy files to system directories
+- ✅ Set up systemd service (Linux only)
+- ✅ Install GUI config editor
+
+### Manual Installation
+
+#### Prerequisites by Platform
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo apt-get install python3 python3-tk iproute2 procps network-manager
+```
+
+**Linux (Fedora/RHEL):**
+```bash
+sudo dnf install python3 python3-tkinter iproute procps-ng NetworkManager
+```
+
+**Linux (Arch):**
+```bash
+sudo pacman -S python3 tk iproute2 procps-ng networkmanager
+```
+
+**macOS:**
+```bash
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Python 3
+brew install python3
+```
+
+**Windows:**
+- Download and install [Python 3.8+](https://www.python.org/downloads/windows/)
+- Ensure Python is added to PATH during installation
+
+**Optional GUI Dependencies:**
+- `python3-tk` (Tkinter for GUI warnings and config editor)
+- `imagemagick` or `feh` (Linux/macOS: for custom image overlays)
+
+### Manual Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/shadowdevnotreal/TorGuard.git
+cd TorGuard
+
+# Make executable (Linux/macOS)
+chmod +x tor_guard.py torguard_config_editor.py tor_integration.py
+
+# Copy to system path (Linux/macOS)
+sudo cp tor_guard.py /usr/local/bin/torguard
+sudo cp torguard_config_editor.py /usr/local/bin/torguard-config
+sudo cp tor_integration.py /usr/local/bin/torguard-info
+
+# Windows: Add TorGuard directory to PATH or create shortcuts
 ```
 
 ---
@@ -99,20 +163,26 @@ sudo ln -s $(pwd)/tor_guard.py /usr/local/bin/torguard
 
 ### Basic Usage
 
-> **Note**: Requires root (`sudo`) to disable networking.
+> **Note**: Requires root (`sudo` on Linux/macOS, Administrator on Windows) to disable networking.
 
 ```bash
 # Run with interactive menu (recommended)
-sudo python3 tor_guard.py
+sudo torguard                    # or: sudo python3 tor_guard.py
 
 # Run in headless mode (for servers/automation)
-sudo python3 tor_guard.py --no-menu
+sudo torguard --no-menu
 
 # Enable debug logging
-sudo python3 tor_guard.py --debug
+sudo torguard --debug
 
 # Show config file location
-python3 tor_guard.py --config-path
+torguard --config-path
+
+# Edit configuration with GUI
+torguard-config                  # or: python3 torguard_config_editor.py
+
+# Check Tor installation info
+torguard-info                    # or: python3 tor_integration.py
 ```
 
 ### First Run
@@ -515,16 +585,23 @@ Note: Requires sudo for network disable operations.
 
 Contributions are welcome! Here's how you can help:
 
-### Areas for Improvement
+### Recently Implemented ✅
 
-- [ ] Add systemd integration examples
-- [ ] macOS support (using `networksetup`)
-- [ ] Windows support (using `netsh`)
-- [ ] GUI configuration editor
-- [ ] Email/SMS notifications
-- [ ] Integration with other Tor management tools
-- [ ] Screenshots and demo GIFs
-- [ ] Unit tests and CI/CD
+- [x] ~~Add systemd integration examples~~ - **Implemented!** Service file and installer included
+- [x] ~~macOS support (using `networksetup`)~~ - **Implemented!** Full macOS network control
+- [x] ~~Windows support (using `netsh`)~~ - **Implemented!** Full Windows network control
+- [x] ~~GUI configuration editor~~ - **Implemented!** Tkinter-based visual editor
+- [x] ~~Integration with other Tor management tools~~ - **Implemented!** Tor Browser detection and integration
+- [x] ~~Unit tests and CI/CD~~ - **Implemented!** Pytest suite and GitHub Actions
+
+### Areas for Future Improvement
+
+- [ ] Email/SMS notifications for Tor failures
+- [ ] Desktop notifications (libnotify, Windows Toast, macOS Notification Center)
+- [ ] Web dashboard for remote monitoring
+- [ ] Screenshots and demo GIFs for README
+- [ ] Snap/Flatpak/Homebrew packaging
+- [ ] Browser extension integration
 
 ### Development Setup
 
@@ -533,11 +610,28 @@ Contributions are welcome! Here's how you can help:
 git clone https://github.com/shadowdevnotreal/TorGuard.git
 cd TorGuard
 
-# Run tests (ensure Tor is running)
-python3 tor_guard.py --debug
+# Install development dependencies
+pip install -r requirements-dev.txt
 
-# Make your changes and test
-sudo python3 tor_guard.py --no-menu --debug
+# Run unit tests
+pytest tests/ -v
+
+# Run tests with coverage
+pytest tests/ --cov=. --cov-report=html
+
+# Check code quality
+flake8 .
+black --check .
+mypy tor_guard.py
+
+# Run application in debug mode
+sudo python3 tor_guard.py --debug
+
+# Test GUI config editor
+python3 torguard_config_editor.py
+
+# Check Tor integration
+python3 tor_integration.py
 ```
 
 ### Code Style

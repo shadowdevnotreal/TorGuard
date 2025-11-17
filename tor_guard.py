@@ -18,6 +18,7 @@ import argparse
 import curses
 import logging
 import os
+import platform
 import shutil
 import socket
 import subprocess
@@ -70,6 +71,12 @@ LOGFILE = "/var/tmp/tor_guard.log"
 SOCKET_TIMEOUT = 1.0
 LOG_TAIL_LINES = 30
 SUBPROCESS_TIMEOUT = 5
+
+# Platform detection
+SYSTEM = platform.system().lower()  # 'linux', 'darwin' (macOS), 'windows'
+IS_LINUX = SYSTEM == "linux"
+IS_MACOS = SYSTEM == "darwin"
+IS_WINDOWS = SYSTEM == "windows"
 
 # Setup logging
 logging.basicConfig(
@@ -270,6 +277,17 @@ def detect_network_manager() -> bool:
 
 def list_up_ifaces() -> List[str]:
     """List all UP network interfaces (excluding loopback)."""
+    if IS_LINUX:
+        return list_up_ifaces_linux()
+    elif IS_MACOS:
+        return list_up_ifaces_macos()
+    elif IS_WINDOWS:
+        return list_up_ifaces_windows()
+    return []
+
+
+def list_up_ifaces_linux() -> List[str]:
+    """List all UP network interfaces on Linux."""
     try:
         out = subprocess.check_output(
             ["ip", "-o", "link", "show", "up"],
@@ -287,7 +305,65 @@ def list_up_ifaces() -> List[str]:
             if name != "lo":
                 names.append(name)
 
-    logger.debug(f"Found UP interfaces: {names}")
+    logger.debug(f"Found UP interfaces (Linux): {names}")
+    return names
+
+
+def list_up_ifaces_macos() -> List[str]:
+    """List all UP network interfaces on macOS."""
+    try:
+        out = subprocess.check_output(
+            ["networksetup", "-listallhardwareports"],
+            timeout=SUBPROCESS_TIMEOUT
+        ).decode()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.error(f"Failed to list network interfaces on macOS: {e}")
+        return []
+
+    # Parse networksetup output
+    names = []
+    lines = out.strip().splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("Device:"):
+            device = line.split(":")[1].strip()
+            # Check if interface is up
+            try:
+                status_out = subprocess.check_output(
+                    ["ifconfig", device],
+                    stderr=subprocess.DEVNULL,
+                    timeout=SUBPROCESS_TIMEOUT
+                ).decode()
+                if "status: active" in status_out.lower() or "inet" in status_out:
+                    if device not in ["lo0", "lo"]:
+                        names.append(device)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                continue
+
+    logger.debug(f"Found UP interfaces (macOS): {names}")
+    return names
+
+
+def list_up_ifaces_windows() -> List[str]:
+    """List all UP network interfaces on Windows."""
+    try:
+        out = subprocess.check_output(
+            ["netsh", "interface", "show", "interface"],
+            timeout=SUBPROCESS_TIMEOUT
+        ).decode()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.error(f"Failed to list network interfaces on Windows: {e}")
+        return []
+
+    names = []
+    for line in out.strip().splitlines()[3:]:  # Skip header lines
+        parts = line.split()
+        if len(parts) >= 4 and parts[2].lower() == "connected":
+            # Interface name is the last part
+            name = " ".join(parts[3:])
+            if "loopback" not in name.lower():
+                names.append(name)
+
+    logger.debug(f"Found UP interfaces (Windows): {names}")
     return names
 
 
@@ -313,9 +389,23 @@ def choose_iface(cfg: Dict[str, Any]) -> Optional[str]:
 
 
 def bring_down_network(cfg: Dict[str, Any]) -> bool:
-    """Disable network connectivity."""
+    """Disable network connectivity (platform-aware)."""
     logger.info("User requested network disable")
 
+    if IS_LINUX:
+        return bring_down_network_linux(cfg)
+    elif IS_MACOS:
+        return bring_down_network_macos(cfg)
+    elif IS_WINDOWS:
+        return bring_down_network_windows(cfg)
+    else:
+        logger.error(f"Unsupported platform: {SYSTEM}")
+        print(f"Error: Network disable not supported on {SYSTEM}")
+        return False
+
+
+def bring_down_network_linux(cfg: Dict[str, Any]) -> bool:
+    """Disable network on Linux."""
     if detect_network_manager():
         print("\nRunning: nmcli networking off")
         if cfg["REQUIRE_CONFIRM"]:
@@ -362,15 +452,107 @@ def bring_down_network(cfg: Dict[str, Any]) -> bool:
         return False
 
 
+def bring_down_network_macos(cfg: Dict[str, Any]) -> bool:
+    """Disable network on macOS using networksetup."""
+    # Get list of network services
+    try:
+        out = subprocess.check_output(
+            ["networksetup", "-listallnetworkservices"],
+            timeout=SUBPROCESS_TIMEOUT
+        ).decode()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.error(f"Failed to list network services on macOS: {e}")
+        return False
+
+    services = [line.strip() for line in out.strip().splitlines()[1:] if line.strip() and not line.startswith("*")]
+
+    if not services:
+        print("No network services found.")
+        logger.error("No network services found on macOS")
+        return False
+
+    print(f"\nFound network services: {', '.join(services)}")
+    print("Will disable all network services")
+
+    if cfg["REQUIRE_CONFIRM"]:
+        ok = input("Type YES to proceed: ").strip()
+        if ok != "YES":
+            print("Aborted.")
+            logger.info("User aborted network disable")
+            return False
+
+    success = True
+    for service in services:
+        try:
+            rc = subprocess.call(
+                ["networksetup", "-setnetworkserviceenabled", service, "off"],
+                timeout=SUBPROCESS_TIMEOUT
+            )
+            logger.info(f"Disabled service '{service}' rc={rc}")
+            if rc != 0:
+                success = False
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.error(f"Failed to disable service '{service}': {e}")
+            success = False
+
+    return success
+
+
+def bring_down_network_windows(cfg: Dict[str, Any]) -> bool:
+    """Disable network on Windows using netsh."""
+    ifaces = list_up_ifaces()
+
+    if not ifaces:
+        print("No network interfaces found.")
+        logger.error("No network interfaces found on Windows")
+        return False
+
+    print(f"\nFound network interfaces: {', '.join(ifaces)}")
+    print("Will disable all network interfaces")
+
+    if cfg["REQUIRE_CONFIRM"]:
+        ok = input("Type YES to proceed: ").strip()
+        if ok != "YES":
+            print("Aborted.")
+            logger.info("User aborted network disable")
+            return False
+
+    success = True
+    for iface in ifaces:
+        try:
+            rc = subprocess.call(
+                ["netsh", "interface", "set", "interface", iface, "admin=disable"],
+                timeout=SUBPROCESS_TIMEOUT
+            )
+            logger.info(f"Disabled interface '{iface}' rc={rc}")
+            if rc != 0:
+                success = False
+        except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+            logger.error(f"Failed to disable interface '{iface}': {e}")
+            success = False
+
+    return success
+
+
 def print_reenable_instructions() -> None:
-    """Print instructions for manually re-enabling network."""
-    print("\nManual re-enable instructions (choose one):")
-    if detect_network_manager():
-        print(" - NetworkManager:  sudo nmcli networking on")
-    print(" - Generic Linux:   sudo ip link set <iface> up")
-    print(" - Debian ifup:     sudo ifup <iface>")
-    print(" - macOS examples:  sudo ifconfig en0 up   or   networksetup -setnetworkserviceenabled \"Wi-Fi\" on")
-    print("Then restart your browser.\n")
+    """Print instructions for manually re-enabling network (platform-aware)."""
+    print("\nManual re-enable instructions:")
+
+    if IS_LINUX:
+        if detect_network_manager():
+            print(" - NetworkManager:  sudo nmcli networking on")
+        print(" - Generic Linux:   sudo ip link set <iface> up")
+        print(" - Debian ifup:     sudo ifup <iface>")
+    elif IS_MACOS:
+        print(" - macOS:           sudo networksetup -setnetworkserviceenabled \"Wi-Fi\" on")
+        print(" - Or:              sudo ifconfig en0 up")
+        print(" - List services:   networksetup -listallnetworkservices")
+    elif IS_WINDOWS:
+        print(" - Windows:         netsh interface set interface \"<name>\" admin=enable")
+        print(" - List interfaces: netsh interface show interface")
+        print(" - Or use Network Settings GUI")
+
+    print("\nThen restart your browser.\n")
 
 
 # -------------- Warning UIs --------------
