@@ -5,8 +5,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-green.svg)](https://www.linux.org/)
+![Status](https://img.shields.io/badge/status-active-brightgreen)
 
 > *A lightweight, zero-dependency privacy guardian that automatically detects Tor failures and protects you from accidental unencrypted traffic.*
+
+*Built with Python 3 | Supports Linux systems with optional GUI*
 
 ---
 
@@ -25,32 +28,33 @@ When Tor goes down, TorGuard:
 ## ✨ Features
 
 ### 🔍 **Dual Tor Detection**
-- SOCKS proxy connectivity checks (ports 9050, 9150)
-- Process monitoring (`tor` daemon detection)
+- **Live Monitoring**: Detects Tor activity via SOCKS ports (9050, 9150) and system processes
+- Process monitoring with exact match (`tor` daemon detection)
 - Configurable check intervals and grace periods
 
 ### 🎨 **Multi-Modal Warning System**
 - **Tkinter Full-Screen GUI**: Unmissable red warning dialog
-- **Custom Image Overlay**: Display your own warning image
+- **Custom Image Overlay**: Display your own warning image via `display` or `feh`
 - **ASCII Terminal Fallback**: Works in headless environments
 
 ### 🌐 **Smart Network Control**
-- NetworkManager integration (`nmcli`)
-- Direct interface management (`ip` command)
+- **Failsafe Network Kill**: Disables network via `nmcli` or `ip link` on Tor failure
+- NetworkManager integration (`nmcli networking off`)
+- Direct interface management (`ip link set <iface> down`)
 - Interface whitelisting support
-- Explicit user confirmation before network disable
+- Explicit user confirmation before network disable (recommended)
 
 ### ⚙️ **Production-Ready**
 - **Zero external dependencies** (pure Python standard library)
 - Thread-safe monitoring with proper locking
 - Comprehensive logging (stdlib `logging` module)
-- Configurable retry logic to prevent false positives
+- **Fails Gracefully**: Grace-period + retries to prevent false positives
 - Command-line arguments for automation
 
 ### 🎛️ **Interactive Menu**
-- Curses-based terminal UI
+- **Curses-based terminal UI** (headless-safe)
 - Start/stop monitoring on demand
-- Live status display
+- Live status display (Tor OK/DOWN)
 - Log tail viewer
 - Test warning system
 
@@ -71,12 +75,16 @@ sudo dnf install python3 iproute procps-ng NetworkManager
 sudo pacman -S python3 iproute2 procps-ng networkmanager
 ```
 
+**Optional GUI Dependencies:**
+- `python3-tk` (Tkinter for GUI warnings)
+- `imagemagick` or `feh` (for custom image overlays)
+
 ### Quick Install
 
 ```bash
 # Clone the repository
-git clone https://github.com/shadowdevnotreal/TorTray.git
-cd TorTray
+git clone https://github.com/shadowdevnotreal/TorGuard.git
+cd TorGuard
 
 # Make executable
 chmod +x tor_guard.py
@@ -90,6 +98,8 @@ sudo ln -s $(pwd)/tor_guard.py /usr/local/bin/torguard
 ## 🚀 Quick Start
 
 ### Basic Usage
+
+> **Note**: Requires root (`sudo`) to disable networking.
 
 ```bash
 # Run with interactive menu (recommended)
@@ -108,18 +118,29 @@ python3 tor_guard.py --config-path
 ### First Run
 
 1. **Start TorGuard** with `sudo python3 tor_guard.py`
-2. Use **arrow keys** or **j/k** to navigate
+2. Use **arrow keys** or **j/k** to navigate the curses menu
 3. Select **"Start Monitor"** and press Enter
 4. Monitor will continuously check Tor connectivity
 5. Press **'q'** or select **"Quit"** to exit
+
+### Menu Options
+
+* **Start Monitor**: Begins background checking
+* **Stop Monitor**: Halts the active monitor thread
+* **Status**: Shows current Tor state (OK/DOWN/unknown)
+* **Tail Logs**: Displays recent log entries
+* **Test Warning**: Triggers alert overlay without killing network
+* **Show Config Path**: Displays the path of the active config file
 
 ---
 
 ## ⚙️ Configuration
 
-TorGuard reads configuration from:
+TorGuard uses the following config precedence:
 1. `/etc/tor_guard.conf` (system-wide, requires sudo)
 2. `~/.config/tor_guard/tor_guard.conf` (user-specific, auto-created)
+
+Default config created on first run if none found:
 
 ### Configuration Options
 
@@ -145,14 +166,15 @@ REQUIRE_CONFIRM=true
 # Prefer tkinter GUI full-screen warning when available
 USE_TK=true
 
-# Prefer curses for menu (headless-safe)
+# Prefer curses for menu (headless-safe; will fallback automatically)
 USE_CURSES=true
 
-# Optional path to a red warning image
-RED_IMAGE_PATH=/path/to/warning.png
+# Optional path to a red image (not required). If set and running X, we try to show it via 'display' or 'feh'.
+RED_IMAGE_PATH=
 
-# Optional whitelist of interfaces to disable (comma-separated)
-INTERFACE_WHITELIST=wlan0,eth0
+# Optional whitelist of interfaces to consider for 'ip link set <iface> down' (comma-separated).
+# Leave empty to auto-pick the first non-loopback UP interface.
+INTERFACE_WHITELIST=
 ```
 
 ### Example: Custom Warning Image
@@ -208,7 +230,7 @@ EOF
 sudo python3 tor_guard.py --config /tmp/my_tor_config.conf
 ```
 
-### Example 4: Automation
+### Example 4: Automation with Systemd
 
 ```bash
 # Add to systemd (create /etc/systemd/system/torguard.service)
@@ -218,7 +240,7 @@ After=network.target tor.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /opt/TorTray/tor_guard.py --no-menu
+ExecStart=/usr/bin/python3 /opt/TorGuard/tor_guard.py --no-menu
 Restart=always
 User=root
 
@@ -258,7 +280,7 @@ sudo systemctl stop tor
 
 ---
 
-## 🔍 How It Works
+## 🧠 How It Works
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -319,11 +341,15 @@ sudo systemctl stop tor
 
 ### Detection Algorithm
 
-1. **Primary Check**: Attempt TCP connection to `127.0.0.1:9050` (SOCKS proxy)
-2. **Fallback Check**: Look for running `tor` process
-3. **Grace Period**: Wait N seconds to avoid false positives from temporary glitches
-4. **Retry Logic**: Perform M consecutive checks before declaring failure
-5. **Action**: Trigger warning and optionally disable network
+1. **Monitors SOCKS & Tor process** every few seconds (configurable)
+2. **Primary Check**: Attempt TCP connection to `127.0.0.1:9050` (SOCKS proxy)
+3. **Fallback Check**: Look for running `tor` process (exact match with `pgrep -x`)
+4. On failure, waits **grace period + retries** to avoid false positives
+5. **Grace Period**: Wait N seconds to avoid temporary glitches
+6. **Retry Logic**: Perform M consecutive checks before declaring failure
+7. Triggers fullscreen **red warning UI** (Tkinter/Image/ASCII)
+8. Asks user to disable network (confirmation required unless overridden)
+9. **Action**: Disable via **NetworkManager (`nmcli`)** or **raw interface down** via `ip`
 
 ---
 
@@ -358,6 +384,7 @@ sudo dnf install python3-tkinter  # Fedora
 - Check that `USE_TK=true` in config
 - Verify `DISPLAY` environment variable is set: `echo $DISPLAY`
 - Try ASCII fallback by setting `USE_TK=false`
+- Test with: Select "Test Warning" from the menu
 
 ### Network disable requires sudo
 
@@ -375,6 +402,16 @@ RETRIES=3
 CHECK_INTERVAL=5
 ```
 
+### Running in headless mode
+
+```bash
+# Disable curses menu
+sudo python3 tor_guard.py --no-menu
+
+# Or set in config
+USE_CURSES=false
+```
+
 ---
 
 ## 🔒 Security Considerations
@@ -386,10 +423,13 @@ TorGuard requires `sudo` **only** for disabling network interfaces. The monitori
 ### Safety Features
 
 - **Explicit Confirmation**: By default, requires typing `YES` before disabling network
+- **No automatic disablement** without interactive confirmation (unless configured otherwise)
 - **Logging**: All actions logged to `/var/tmp/tor_guard.log` with timestamps
 - **Thread-Safe**: Proper locking prevents race conditions
 - **Graceful Shutdown**: Uses `sys.exit()` instead of `os._exit()` for proper cleanup
 - **Timeout Protection**: All subprocess calls have timeouts to prevent hangs
+- **Interface Whitelist**: Supports whitelist of interfaces to restrict which can be taken offline
+- **Offline-safe**: Supports offline or GUI-less environments gracefully
 
 ### Privacy Protection
 
@@ -401,7 +441,13 @@ TorGuard requires `sudo` **only** for disabling network interfaces. The monitori
 
 ## 📊 Logs
 
-TorGuard logs to `/var/tmp/tor_guard.log` with the following format:
+Logs are written to:
+
+```
+/var/tmp/tor_guard.log
+```
+
+TorGuard logs with the following format:
 
 ```
 2025-11-17 14:23:01,123 - TorGuard - INFO - Monitor started
@@ -450,6 +496,21 @@ Note: Requires sudo for network disable operations.
 
 ---
 
+## 🛠 Dependencies
+
+**Required:**
+- Python 3.6+
+- `iproute2` (for `ip` command)
+- `procps` or `procps-ng` (for `pgrep`)
+- Standard library modules: `socket`, `subprocess`, `curses`, `threading`, `argparse`, `logging`
+
+**Optional:**
+- `python3-tk` (Tkinter for GUI warning)
+- `network-manager` (`nmcli` for NetworkManager integration)
+- `imagemagick` or `feh` (for custom image overlays)
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how you can help:
@@ -462,13 +523,15 @@ Contributions are welcome! Here's how you can help:
 - [ ] GUI configuration editor
 - [ ] Email/SMS notifications
 - [ ] Integration with other Tor management tools
+- [ ] Screenshots and demo GIFs
+- [ ] Unit tests and CI/CD
 
 ### Development Setup
 
 ```bash
 # Clone the repo
-git clone https://github.com/shadowdevnotreal/TorTray.git
-cd TorTray
+git clone https://github.com/shadowdevnotreal/TorGuard.git
+cd TorGuard
 
 # Run tests (ensure Tor is running)
 python3 tor_guard.py --debug
@@ -487,14 +550,25 @@ sudo python3 tor_guard.py --no-menu --debug
 
 ---
 
+## 📦 Packaging Suggestion
+
+To distribute:
+
+- Include `tor_guard.py`
+- Package example config in `etc/tor_guard.conf`
+- Optional: Systemd unit file for background monitoring
+- Optional: Desktop launcher file
+
+---
+
 ## 📜 License
 
-This project is licensed under the **MIT License** - see below:
+This project is licensed under the **MIT License** - free to use, modify, distribute.
 
 ```
 MIT License
 
-Copyright (c) 2025 TorTray Contributors
+Copyright (c) 2025 TorGuard Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -529,8 +603,8 @@ SOFTWARE.
 
 ### Get Help
 
-- **Issues**: [GitHub Issues](https://github.com/shadowdevnotreal/TorTray/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/shadowdevnotreal/TorTray/discussions)
+- **Issues**: [GitHub Issues](https://github.com/shadowdevnotreal/TorGuard/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/shadowdevnotreal/TorGuard/discussions)
 
 ### Stay Updated
 
@@ -542,7 +616,7 @@ SOFTWARE.
 
 - [Tor Browser](https://www.torproject.org/download/) - Official Tor browser
 - [torsocks](https://github.com/dgoulet/torsocks) - Use SOCKS-friendly apps with Tor
-- [tor-router](https://github.com/micahflee/onionshare) - Share files anonymously
+- [OnionShare](https://github.com/micahflee/onionshare) - Share files anonymously
 
 ---
 
