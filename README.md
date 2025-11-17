@@ -1,5 +1,8 @@
 # 🛡️ TorGuard
 
+<img width="1024" height="1024" alt="ChatGPT Image Nov 17, 2025, 09_42_33 AM" src="https://github.com/user-attachments/assets/211d7999-248f-4e13-b84d-9ff6932f76e6" />
+
+
 **Your Last Line of Defense Against Tor Connection Failures**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
