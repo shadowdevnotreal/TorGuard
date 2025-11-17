@@ -6,7 +6,6 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-green.svg)](https://www.python.org/)
 ![Status](https://img.shields.io/badge/status-active-brightgreen)
-[![CI](https://img.shields.io/badge/CI-passing-success)](https://github.com/shadowdevnotreal/TorGuard/actions)
 
 > *A lightweight, zero-dependency privacy guardian that automatically detects Tor failures and protects you from accidental unencrypted traffic.*
 
@@ -73,13 +72,6 @@ When Tor goes down, TorGuard:
 - Control port discovery
 - torsocks integration check
 - Comprehensive Tor installation info
-
-### 🧪 **NEW: Testing & CI/CD**
-- Comprehensive unit test suite with pytest
-- Cross-platform CI testing (Linux, macOS, Windows)
-- Code quality checks (flake8, black, mypy)
-- Security scanning with bandit
-- Automated releases with GitHub Actions
 
 ---
 
@@ -592,7 +584,6 @@ Contributions are welcome! Here's how you can help:
 - [x] ~~Windows support (using `netsh`)~~ - **Implemented!** Full Windows network control
 - [x] ~~GUI configuration editor~~ - **Implemented!** Tkinter-based visual editor
 - [x] ~~Integration with other Tor management tools~~ - **Implemented!** Tor Browser detection and integration
-- [x] ~~Unit tests and CI/CD~~ - **Implemented!** Pytest suite and GitHub Actions
 
 ### Areas for Future Improvement
 
@@ -609,20 +600,6 @@ Contributions are welcome! Here's how you can help:
 # Clone the repo
 git clone https://github.com/shadowdevnotreal/TorGuard.git
 cd TorGuard
-
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Run unit tests
-pytest tests/ -v
-
-# Run tests with coverage
-pytest tests/ --cov=. --cov-report=html
-
-# Check code quality
-flake8 .
-black --check .
-mypy tor_guard.py
 
 # Run application in debug mode
 sudo python3 tor_guard.py --debug
